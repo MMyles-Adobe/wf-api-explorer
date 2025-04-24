@@ -17,7 +17,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3001;
 
 const WORKFRONT_API_BASE = 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0';
-const API_KEY = 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0';
+const API_KEY = process.env.VITE_WORKFRONT_API_KEY;
 
 // Helper function to fetch data from Workfront
 async function fetchWorkfrontData(objectType, fields, page = 1, pageSize = 1000) {

@@ -1,8 +1,9 @@
+import os
 import requests
 import json
 
-# Workfront API configuration
-API_KEY = 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
+# Get API key from environment variable
+API_KEY = os.getenv('VITE_WORKFRONT_API_KEY')
 BASE_URL = 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0'
 
 def test_api_connection():
