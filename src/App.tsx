@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Provider,
   defaultTheme,
@@ -20,8 +20,10 @@ import {
   DialogTrigger,
   Content,
   Button,
-  StatusLight
+  StatusLight,
+  NumberField
 } from '@adobe/react-spectrum';
+import { useAsyncList } from '@react-stately/data';
 import type { Key } from '@adobe/react-spectrum';
 import axios from 'axios';
 
@@ -54,89 +56,101 @@ interface SortDescriptor {
   direction: 'ascending' | 'descending';
 }
 
+interface PaginationData {
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+interface ApiResponse {
+  data: ApiObject[];
+  pagination: PaginationData;
+}
+
+interface AsyncListState {
+  items: ApiObject[];
+  cursor?: string;
+  hasMore?: boolean;
+}
+
 function App() {
-  const [objects, setObjects] = useState<ApiObject[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [objectType, setObjectType] = useState<Key>('Projects');
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: 'name',
     direction: 'ascending'
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [items, setItems] = useState<ApiObject[]>([]);
+  const [error, setError] = useState<Error | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  const loadData = async (pageNum: number, append = false) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const endpoint = String(objectType).toLowerCase();
+      const pageSize = 200; // Increased page size to handle more records
+      const response = await axios.get<ApiResponse>(`/api/${endpoint}`, {
+        params: { page: pageNum, pageSize }
+      });
+
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
+
+      const newItems = Array.isArray(response.data.data) ? response.data.data : [];
+      const pagination = response.data.pagination;
+      
+      console.log(`Loaded ${newItems.length} items, total count: ${pagination?.totalCount}`);
+      
+      setItems(prev => append ? [...prev, ...newItems] : newItems);
+      
+      if (pagination) {
+        setTotalCount(pagination.totalCount);
+        setHasMore(pageNum * pageSize < pagination.totalCount);
+      } else {
+        setTotalCount(newItems.length);
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setError(error instanceof Error ? error : new Error('Failed to load data'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load initial data
+  useEffect(() => {
+    setPage(1);
+    loadData(1, false);
+  }, [objectType]);
+
+  // Handle scroll events for infinite loading
+  useEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = table;
+      if (scrollHeight - scrollTop <= clientHeight * 1.5 && !isLoading && hasMore) {
+        const nextPage = page + 1;
+        setPage(nextPage);
+        loadData(nextPage, true);
+      }
+    };
+
+    table.addEventListener('scroll', handleScroll);
+    return () => table.removeEventListener('scroll', handleScroll);
+  }, [isLoading, hasMore, page]);
 
   const handleObjectTypeChange = (key: Key) => {
     setObjectType(key);
   };
-
-  useEffect(() => {
-    const fetchObjects = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const endpoint = String(objectType).toLowerCase();
-        const response = await axios.get(`/api/${endpoint}`);
-        if (response.data && response.data.data) {
-          setObjects(response.data.data);
-        } else {
-          setError('No data received from server');
-        }
-      } catch (err) {
-        setError('Failed to fetch data');
-        console.error('Error fetching data:', err);
-      }
-      setLoading(false);
-    };
-
-    fetchObjects();
-  }, [objectType]);
-
-  const renderTableColumns = () => {
-    const columns = {
-      Projects: [
-        <Column key="name" allowsSorting>Name</Column>,
-        <Column key="status" allowsSorting>Status</Column>,
-        <Column key="percentComplete" allowsSorting>Progress</Column>,
-        <Column key="plannedCompletionDate" allowsSorting>Due Date</Column>
-      ],
-      Tasks: [
-        <Column key="name" allowsSorting>Name</Column>,
-        <Column key="status" allowsSorting>Status</Column>,
-        <Column key="assignedToID" allowsSorting>Assigned To</Column>,
-        <Column key="percentComplete" allowsSorting>Progress</Column>
-      ],
-      Issues: [
-        <Column key="name" allowsSorting>Name</Column>,
-        <Column key="status" allowsSorting>Status</Column>,
-        <Column key="priority" allowsSorting>Priority</Column>,
-        <Column key="severity" allowsSorting>Severity</Column>
-      ]
-    };
-
-    return columns[String(objectType) as keyof typeof columns] || [];
-  };
-
-  const sortedObjects = React.useMemo(() => {
-    if (!sortDescriptor) return objects;
-    
-    return [...objects].sort((a, b) => {
-      let first = a[sortDescriptor.column as keyof ApiObject];
-      let second = b[sortDescriptor.column as keyof ApiObject];
-      
-      if (sortDescriptor.direction === 'descending') {
-        [first, second] = [second, first];
-      }
-      
-      if (typeof first === 'string' && typeof second === 'string') {
-        return first.localeCompare(second);
-      }
-      
-      if (typeof first === 'number' && typeof second === 'number') {
-        return first - second;
-      }
-      
-      return 0;
-    });
-  }, [objects, sortDescriptor]);
 
   const getStatusVariant = (status: string) => {
     const statusMap: Record<string, 'positive' | 'negative' | 'notice' | 'info' | 'neutral'> = {
@@ -153,7 +167,7 @@ function App() {
     return statusMap[status] || 'neutral';
   };
 
-  const renderTableRow = (item: ApiObject) => {
+  const renderTableRow = (item: ApiObject): JSX.Element => {
     const renderers = {
       Projects: (project: Project) => (
         <Row key={project.ID}>
@@ -194,7 +208,32 @@ function App() {
     };
 
     const renderer = renderers[String(objectType) as keyof typeof renderers];
-    return renderer ? renderer(item as any) : null;
+    return renderer ? renderer(item as any) : <Row><Cell>No data available</Cell></Row>;
+  };
+
+  const renderTableColumns = () => {
+    const columns = {
+      Projects: [
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="percentComplete" allowsSorting>Progress</Column>,
+        <Column key="plannedCompletionDate" allowsSorting>Due Date</Column>
+      ],
+      Tasks: [
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="assignedToID" allowsSorting>Assigned To</Column>,
+        <Column key="percentComplete" allowsSorting>Progress</Column>
+      ],
+      Issues: [
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="priority" allowsSorting>Priority</Column>,
+        <Column key="severity" allowsSorting>Severity</Column>
+      ]
+    };
+
+    return columns[String(objectType) as keyof typeof columns] || [];
   };
 
   return (
@@ -216,10 +255,9 @@ function App() {
               <Item key="Tasks">Tasks</Item>
               <Item key="Issues">Issues</Item>
             </Picker>
-            <Text>Total Rows: {objects.length}</Text>
           </Flex>
 
-          {loading && (
+          {isLoading && items.length === 0 && (
             <ProgressBar
               label="Loading data..."
               isIndeterminate
@@ -231,26 +269,37 @@ function App() {
               <Button variant="negative">Error</Button>
               <Dialog>
                 <Heading>Error</Heading>
-                <Content>{error}</Content>
+                <Content>{error.message}</Content>
               </Dialog>
             </DialogTrigger>
           )}
 
-          {!loading && !error && (
-            <TableView
-              aria-label={`${String(objectType)} table`}
-              width="100%"
-              height="500px"
-              sortDescriptor={sortDescriptor}
-              onSortChange={setSortDescriptor}
-            >
-              <TableHeader>
-                {renderTableColumns()}
-              </TableHeader>
-              <TableBody items={sortedObjects}>
-                {renderTableRow}
-              </TableBody>
-            </TableView>
+          {!error && (
+            <>
+              <div ref={tableRef} style={{ height: '500px', overflow: 'auto' }}>
+                <TableView
+                  aria-label={`${String(objectType)} table`}
+                  width="100%"
+                  height="100%"
+                  sortDescriptor={sortDescriptor}
+                  onSortChange={setSortDescriptor}
+                >
+                  <TableHeader>
+                    {renderTableColumns()}
+                  </TableHeader>
+                  <TableBody items={items}>
+                    {renderTableRow}
+                  </TableBody>
+                </TableView>
+              </div>
+              
+              {isLoading && items.length > 0 && (
+                <ProgressBar
+                  label="Loading more data..."
+                  isIndeterminate
+                />
+              )}
+            </>
           )}
         </Flex>
       </View>

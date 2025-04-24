@@ -20,19 +20,76 @@ const WORKFRONT_API_BASE = 'https://productmgmtaemaebeta.my.workfront.com/attask
 const API_KEY = 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0';
 
 // Helper function to fetch data from Workfront
-async function fetchWorkfrontData(objectType, fields) {
+async function fetchWorkfrontData(objectType, fields, page = 1, pageSize = 1000) {
   try {
-    const response = await axios.get(`${WORKFRONT_API_BASE}/${objectType}/search`, {
+    console.log(`Making Workfront API request with params:`, {
+      objectType,
+      fields,
+      page,
+      pageSize
+    });
+
+    // First, get the total count
+    const countResponse = await axios.get(`${WORKFRONT_API_BASE}/${objectType}/search`, {
       params: {
         apiKey: API_KEY,
-        fields: fields,
-        method: 'GET'
+        fields: 'ID',
+        method: 'GET',
+        $$ALL: true,
+        $$TOTAL_COUNT: true
       }
     });
-    return response.data.data || [];
+
+    const totalCount = countResponse.data.metadata?.totalCount || 0;
+    console.log(`Total count: ${totalCount}`);
+
+    // Calculate how many pages we need
+    const totalPages = Math.ceil(totalCount / pageSize);
+    console.log(`Total pages: ${totalPages}`);
+
+    // Fetch all pages
+    const allData = [];
+    for (let currentPage = 1; currentPage <= totalPages; currentPage++) {
+      console.log(`Fetching page ${currentPage} of ${totalPages}`);
+
+      const response = await axios.get(`${WORKFRONT_API_BASE}/${objectType}/search`, {
+        params: {
+          apiKey: API_KEY,
+          fields: fields,
+          method: 'GET',
+          $$LIMIT: pageSize,
+          $$FIRST: (currentPage - 1) * pageSize,
+          ID_Sort: 'asc'
+        }
+      });
+
+      const pageData = response.data.data || [];
+      console.log(`Fetched ${pageData.length} items for page ${currentPage}`);
+      allData.push(...pageData);
+    }
+
+    console.log(`Total items fetched: ${allData.length}`);
+    
+    return {
+      data: allData,
+      pagination: {
+        totalCount,
+        page: 1,
+        pageSize: totalCount,
+        totalPages: 1
+      }
+    };
   } catch (error) {
-    console.error(`Error fetching ${objectType} data:`, error.response?.data || error.message);
-    throw error;
+    console.error(`Error fetching ${objectType} data:`, {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      headers: error.response?.headers,
+      requestUrl: error.config?.url,
+      requestParams: error.config?.params
+    });
+    throw new Error(`Failed to fetch ${objectType} data: ${error.response?.data?.error?.message || error.message}`);
   }
 }
 
@@ -64,21 +121,39 @@ const objectTypes = {
 app.get('/api/:objectType', async (req, res) => {
   try {
     const { objectType } = req.params;
+    const { page = 1, pageSize = 200 } = req.query;
     const config = objectTypes[objectType.toLowerCase()];
     
     if (!config) {
       return res.status(400).json({ error: 'Invalid object type' });
     }
 
-    console.log(`Fetching ${objectType} from Workfront...`);
-    const data = await fetchWorkfrontData(config.endpoint, config.fields);
-    console.log('Workfront response:', data);
-    res.json({ data });
+    console.log(`Fetching ${objectType} from Workfront with page ${page} and pageSize ${pageSize}...`);
+    const result = await fetchWorkfrontData(
+      config.endpoint, 
+      config.fields,
+      parseInt(page),
+      parseInt(pageSize)
+    );
+    
+    // Ensure the response has the correct structure
+    const response = {
+      data: result.data,
+      pagination: {
+        totalCount: result.pagination.totalCount,
+        page: result.pagination.page,
+        pageSize: result.pagination.pageSize,
+        totalPages: result.pagination.totalPages
+      }
+    };
+    
+    console.log(`Workfront response: ${response.data.length} items, total count: ${response.pagination.totalCount}`);
+    res.json(response);
   } catch (error) {
-    console.error(`Error fetching ${req.params.objectType} data:`, error.response?.data || error.message);
+    console.error(`Error fetching ${req.params.objectType} data:`, error.message);
     res.status(500).json({ 
       error: `Failed to fetch ${req.params.objectType}`,
-      details: error.response?.data || error.message
+      details: error.message
     });
   }
 });
@@ -179,6 +254,32 @@ app.get('/api/instance-info', async (req, res) => {
   } catch (error) {
     console.error('Error getting instance info:', error);
     res.status(500).json({ error: 'Failed to get instance info' });
+  }
+});
+
+// Add a new endpoint to get total count
+app.get('/api/projects/count', async (req, res) => {
+  try {
+    const response = await axios.get(`${WORKFRONT_API_BASE}/project/search`, {
+      params: {
+        apiKey: API_KEY,
+        fields: 'ID',  // Only request ID field to minimize response size
+        method: 'GET',
+        $$ALL: true,  // This ensures we get the total count
+        $$TOTAL_COUNT: true  // Explicitly request total count
+      }
+    });
+
+    const totalCount = response.data.metadata?.totalCount || 0;
+    console.log(`Total projects count: ${totalCount}`);
+    
+    res.json({ totalCount });
+  } catch (error) {
+    console.error('Error getting project count:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to get project count',
+      details: error.response?.data?.error?.message || error.message
+    });
   }
 });
 
