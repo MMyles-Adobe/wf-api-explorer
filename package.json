@@ -2,7 +2,7 @@
   "name": "workfront-api",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://MMyles-Adobe.github.io/wf-api-explorer",
+  "homepage": ".",
   "type": "module",
   "dependencies": {
     "@adobe/react-spectrum": "^3.34.0",

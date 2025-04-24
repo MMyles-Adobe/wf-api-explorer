@@ -27,6 +27,14 @@ import { useAsyncList } from '@react-stately/data';
 import type { Key } from '@adobe/react-spectrum';
 import axios from 'axios';
 
+// Create axios instance with base URL
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  params: {
+    apiKey: import.meta.env.VITE_WORKFRONT_API_KEY
+  }
+});
+
 interface BaseObject {
   ID: string;
   name: string;
@@ -94,8 +102,12 @@ function App() {
     try {
       const endpoint = String(objectType).toLowerCase();
       const pageSize = 200; // Increased page size to handle more records
-      const response = await axios.get<ApiResponse>(`/api/${endpoint}`, {
-        params: { page: pageNum, pageSize }
+      const response = await api.get<ApiResponse>(`/${endpoint}/search`, {
+        params: { 
+          page: pageNum, 
+          pageSize,
+          fields: 'name,status,percentComplete,plannedCompletionDate,assignedToID,duration,priority,severity'
+        }
       });
 
       if (!response.data) {
