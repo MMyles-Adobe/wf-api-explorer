@@ -24,9 +24,11 @@ jobs:
         run: npm run build
         env:
           VITE_WORKFRONT_API_KEY: ${{ secrets.VITE_WORKFRONT_API_KEY }}
+          VITE_API_URL: 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0'
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist 
+          publish_dir: ./dist
+          publish_branch: gh-pages 
