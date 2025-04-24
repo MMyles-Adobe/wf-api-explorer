@@ -19,7 +19,8 @@ import {
   Dialog,
   DialogTrigger,
   Content,
-  Button
+  Button,
+  StatusLight
 } from '@adobe/react-spectrum';
 import type { Key } from '@adobe/react-spectrum';
 import axios from 'axios';
@@ -48,11 +49,20 @@ interface Issue extends BaseObject {
 
 type ApiObject = Project | Task | Issue;
 
+interface SortDescriptor {
+  column: Key;
+  direction: 'ascending' | 'descending';
+}
+
 function App() {
   const [objects, setObjects] = useState<ApiObject[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [objectType, setObjectType] = useState<Key>('Projects');
+  const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
+    column: 'name',
+    direction: 'ascending'
+  });
 
   const handleObjectTypeChange = (key: Key) => {
     setObjectType(key);
@@ -83,26 +93,64 @@ function App() {
   const renderTableColumns = () => {
     const columns = {
       Projects: [
-        <Column key="name">Name</Column>,
-        <Column key="status">Status</Column>,
-        <Column key="percentComplete">Progress</Column>,
-        <Column key="plannedCompletionDate">Due Date</Column>
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="percentComplete" allowsSorting>Progress</Column>,
+        <Column key="plannedCompletionDate" allowsSorting>Due Date</Column>
       ],
       Tasks: [
-        <Column key="name">Name</Column>,
-        <Column key="status">Status</Column>,
-        <Column key="assignedToID">Assigned To</Column>,
-        <Column key="percentComplete">Progress</Column>
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="assignedToID" allowsSorting>Assigned To</Column>,
+        <Column key="percentComplete" allowsSorting>Progress</Column>
       ],
       Issues: [
-        <Column key="name">Name</Column>,
-        <Column key="status">Status</Column>,
-        <Column key="priority">Priority</Column>,
-        <Column key="severity">Severity</Column>
+        <Column key="name" allowsSorting>Name</Column>,
+        <Column key="status" allowsSorting>Status</Column>,
+        <Column key="priority" allowsSorting>Priority</Column>,
+        <Column key="severity" allowsSorting>Severity</Column>
       ]
     };
 
     return columns[String(objectType) as keyof typeof columns] || [];
+  };
+
+  const sortedObjects = React.useMemo(() => {
+    if (!sortDescriptor) return objects;
+    
+    return [...objects].sort((a, b) => {
+      let first = a[sortDescriptor.column as keyof ApiObject];
+      let second = b[sortDescriptor.column as keyof ApiObject];
+      
+      if (sortDescriptor.direction === 'descending') {
+        [first, second] = [second, first];
+      }
+      
+      if (typeof first === 'string' && typeof second === 'string') {
+        return first.localeCompare(second);
+      }
+      
+      if (typeof first === 'number' && typeof second === 'number') {
+        return first - second;
+      }
+      
+      return 0;
+    });
+  }, [objects, sortDescriptor]);
+
+  const getStatusVariant = (status: string) => {
+    const statusMap: Record<string, 'positive' | 'negative' | 'notice' | 'info' | 'neutral'> = {
+      'CUR': 'positive',    // Current
+      'PLN': 'info',        // Planning
+      'CPL': 'positive',    // Complete
+      'IDA': 'notice',      // In Development
+      'INP': 'notice',      // In Progress
+      'NEW': 'info',        // New
+      'CLS': 'positive',    // Closed
+      'RLV': 'neutral',     // Resolved
+      'QUE': 'notice'       // Queued
+    };
+    return statusMap[status] || 'neutral';
   };
 
   const renderTableRow = (item: ApiObject) => {
@@ -110,7 +158,11 @@ function App() {
       Projects: (project: Project) => (
         <Row key={project.ID}>
           <Cell>{project.name}</Cell>
-          <Cell>{project.status}</Cell>
+          <Cell>
+            <StatusLight variant={getStatusVariant(project.status || '')}>
+              {project.status}
+            </StatusLight>
+          </Cell>
           <Cell>{project.percentComplete}%</Cell>
           <Cell>{project.plannedCompletionDate}</Cell>
         </Row>
@@ -118,7 +170,11 @@ function App() {
       Tasks: (task: Task) => (
         <Row key={task.ID}>
           <Cell>{task.name}</Cell>
-          <Cell>{task.status}</Cell>
+          <Cell>
+            <StatusLight variant={getStatusVariant(task.status || '')}>
+              {task.status}
+            </StatusLight>
+          </Cell>
           <Cell>{task.assignedToID}</Cell>
           <Cell>{task.percentComplete}%</Cell>
         </Row>
@@ -126,7 +182,11 @@ function App() {
       Issues: (issue: Issue) => (
         <Row key={issue.ID}>
           <Cell>{issue.name}</Cell>
-          <Cell>{issue.status}</Cell>
+          <Cell>
+            <StatusLight variant={getStatusVariant(issue.status || '')}>
+              {issue.status}
+            </StatusLight>
+          </Cell>
           <Cell>{issue.priority}</Cell>
           <Cell>{issue.severity}</Cell>
         </Row>
@@ -139,22 +199,25 @@ function App() {
 
   return (
     <Provider theme={defaultTheme}>
-      <div className="App">
+      <View paddingX="size-300">
         <Flex direction="column" gap="size-200">
           <View>
             <Heading level={1}>Workfront API Explorer</Heading>
             <Text>Select an object type to view its data</Text>
           </View>
 
-          <Picker
-            label="Object Type"
-            selectedKey={objectType}
-            onSelectionChange={handleObjectTypeChange}
-          >
-            <Item key="Projects">Projects</Item>
-            <Item key="Tasks">Tasks</Item>
-            <Item key="Issues">Issues</Item>
-          </Picker>
+          <Flex gap="size-200" alignItems="center" justifyContent="space-between">
+            <Picker
+              label="Object Type"
+              selectedKey={objectType}
+              onSelectionChange={handleObjectTypeChange}
+            >
+              <Item key="Projects">Projects</Item>
+              <Item key="Tasks">Tasks</Item>
+              <Item key="Issues">Issues</Item>
+            </Picker>
+            <Text>Total Rows: {objects.length}</Text>
+          </Flex>
 
           {loading && (
             <ProgressBar
@@ -178,17 +241,19 @@ function App() {
               aria-label={`${String(objectType)} table`}
               width="100%"
               height="500px"
+              sortDescriptor={sortDescriptor}
+              onSortChange={setSortDescriptor}
             >
               <TableHeader>
                 {renderTableColumns()}
               </TableHeader>
-              <TableBody items={objects}>
+              <TableBody items={sortedObjects}>
                 {renderTableRow}
               </TableBody>
             </TableView>
           )}
         </Flex>
-      </div>
+      </View>
     </Provider>
   );
 }
