@@ -20,15 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Create .env file
-        run: |
-          cat << EOF > .env
-          VITE_API_URL=https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0
-          VITE_WORKFRONT_API_KEY=${{ secrets.VITE_WORKFRONT_API_KEY }}
-          EOF
-
       - name: Build
-        run: npm run build
+        run: NODE_ENV=production VITE_WORKFRONT_API_KEY=${{ secrets.VITE_WORKFRONT_API_KEY }} npm run build
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
