@@ -15,7 +15,7 @@ export default defineConfig({
     }
   },
   define: {
-    'process.env': {
+    'import.meta.env': {
       VITE_API_URL: 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0',
       VITE_WORKFRONT_API_KEY: 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
     }
