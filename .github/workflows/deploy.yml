@@ -20,6 +20,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Create .env.production
+        run: |
+          echo "VITE_API_URL=https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0" > .env.production
+          echo "VITE_WORKFRONT_API_KEY=${{ secrets.VITE_WORKFRONT_API_KEY }}" >> .env.production
+
       - name: Build
         run: npm run build
 
