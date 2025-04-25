@@ -20,11 +20,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Create .env.production
-        run: |
-          echo "VITE_API_URL=https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0" > .env.production
-          echo "VITE_WORKFRONT_API_KEY=${{ secrets.VITE_WORKFRONT_API_KEY }}" >> .env.production
-
       - name: Build
         run: npm run build
 
@@ -33,4 +28,16 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist
-          publish_branch: gh-pages 
+          publish_branch: gh-pages
+
+      - name: Deploy Proxy Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /path/to/your/app
+            git pull
+            npm install --legacy-peer-deps
+            pm2 restart wf-api-explorer 

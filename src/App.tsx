@@ -29,10 +29,7 @@ import axios from 'axios';
 
 // Create axios instance with base URL
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  params: {
-    apiKey: import.meta.env.VITE_WORKFRONT_API_KEY
-  }
+  baseURL: 'https://wf-api-explorer.vercel.app/api'
 });
 
 interface BaseObject {
