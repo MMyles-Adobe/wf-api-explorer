@@ -16,10 +16,8 @@ export default defineConfig({
   },
   define: {
     'process.env': {
-      VITE_API_URL: process.env.NODE_ENV === 'production' 
-        ? 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0'
-        : 'http://localhost:3001',
-      VITE_WORKFRONT_API_KEY: process.env.VITE_WORKFRONT_API_KEY || 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
+      VITE_API_URL: 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0',
+      VITE_WORKFRONT_API_KEY: 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
     }
   },
   base: './',
