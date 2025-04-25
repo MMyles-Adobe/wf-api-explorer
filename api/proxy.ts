@@ -1,32 +1,38 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { VercelRequest, VercelResponse } from '@vercel/node';
 import axios from 'axios';
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
-) {
+const WORKFRONT_API_URL = 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0';
+const WORKFRONT_API_KEY = process.env.WORKFRONT_API_KEY;
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { path, ...query } = req.query;
-    const apiUrl = `https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0/${path}`;
+    const { method, query, body } = req;
+    const endpoint = req.url?.split('/')[1];
     
-    const response = await axios.get(apiUrl, {
+    if (!endpoint) {
+      return res.status(400).json({ error: 'Missing endpoint' });
+    }
+
+    if (!WORKFRONT_API_KEY) {
+      return res.status(500).json({ error: 'API key not configured' });
+    }
+
+    const response = await axios({
+      method,
+      url: `${WORKFRONT_API_URL}/${endpoint}`,
       params: {
         ...query,
-        apiKey: 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
+        apiKey: WORKFRONT_API_KEY
+      },
+      data: body,
+      headers: {
+        'Content-Type': 'application/json'
       }
     });
 
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', 'https://mmyles-adobe.github.io');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-    res.status(200).json(response.data);
+    res.status(response.status).json(response.data);
   } catch (error) {
     console.error('Proxy error:', error);
-    res.status(error.response?.status || 500).json({
-      error: error.message
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 } 
