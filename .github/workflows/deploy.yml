@@ -20,10 +20,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Create .env file
+        run: |
+          cat << EOF > .env
+          VITE_API_URL=https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0
+          VITE_WORKFRONT_API_KEY=${{ secrets.VITE_WORKFRONT_API_KEY }}
+          EOF
+
       - name: Build
-        env:
-          VITE_API_URL: https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0
-          VITE_WORKFRONT_API_KEY: ${{ secrets.VITE_WORKFRONT_API_KEY }}
         run: npm run build
 
       - name: Deploy
