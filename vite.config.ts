@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: {
+      'process.env': {},
+      'process.env.NODE_ENV': JSON.stringify(mode),
+      'process.version': JSON.stringify('v16.14.0'),
       'import.meta.env': {
         VITE_API_URL: mode === 'production' 
           ? 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0'
