@@ -24,7 +24,8 @@ import {
   NumberField,
   Tabs,
   TabList,
-  TabPanels
+  TabPanels,
+  Switch
 } from '@adobe/react-spectrum';
 import { useAsyncList } from '@react-stately/data';
 import type { Key } from '@adobe/react-spectrum';
@@ -104,11 +105,20 @@ interface NetworkNode extends d3.SimulationNodeDatum {
   name: string;
   type: 'Portfolio' | 'Program' | 'Project' | 'Task' | 'Issue';
   group: number;
+  x?: number;
+  y?: number;
+  fx?: number | null;
+  fy?: number | null;
 }
 
 interface NetworkLink extends d3.SimulationLinkDatum<NetworkNode> {
+  source: string | NetworkNode;
+  target: string | NetworkNode;
   value: number;
 }
+
+// Add type for status codes
+type StatusCode = 'CUR' | 'PLN' | 'CPL' | 'IDA' | 'INP' | 'NEW' | 'CLS' | 'RLV' | 'QUE';
 
 // TODO: Add proper Vite env types in vite-env.d.ts
 // import.meta.env usage commented out for linter
@@ -208,7 +218,7 @@ function buildNetworkData(data: ApiObject[]): { nodes: NetworkNode[]; links: Net
 // DraggableCircle component
 type DraggableCircleProps = {
   node: NetworkNode;
-  simulation: d3.Simulation<NetworkNode, undefined>;
+  simulation: d3.Simulation<NetworkNode, NetworkLink>;
   [key: string]: any;
 };
 
@@ -236,13 +246,13 @@ function DraggableCircle({ node, simulation, ...props }: DraggableCircleProps) {
   return <circle ref={ref} {...props} />;
 }
 
-function NetworkGraph({ data }: { data: ApiObject[] }) {
+function NetworkGraph({ data, hideOrphans = false }: { data: ApiObject[]; hideOrphans?: boolean }) {
   const [simNodes, setSimNodes] = useState<NetworkNode[]>([]);
   const [simLinks, setSimLinks] = useState<NetworkLink[]>([]);
   const [viewBox, setViewBox] = useState<string | undefined>(undefined);
   const svgRef = useRef<SVGSVGElement>(null);
   const gRef = useRef<SVGGElement>(null);
-  const [simulation, setSimulation] = useState<d3.Simulation<NetworkNode, undefined> | null>(null);
+  const [simulation, setSimulation] = useState<d3.Simulation<NetworkNode, NetworkLink> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const prevDataRef = useRef<ApiObject[]>([]);
 
@@ -257,6 +267,12 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
     if (typeof link.target === 'object' && link.target !== null) linkedNodeIds.add(link.target.id);
     else if (typeof link.target === 'string') linkedNodeIds.add(link.target);
   });
+
+  // Filter out orphaned nodes if hideOrphans is true
+  const filteredNodes = hideOrphans 
+    ? nodes.filter(node => linkedNodeIds.has(node.id))
+    : nodes;
+
   const orphanedByType: Record<string, NetworkNode[]> = {};
   nodes.forEach(node => {
     if (!linkedNodeIds.has(node.id)) {
@@ -266,14 +282,14 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
   });
 
   useEffect(() => {
-    if (nodes.length === 0) {
+    if (filteredNodes.length === 0) {
       setSimNodes([]);
       setSimLinks([]);
       setViewBox(undefined);
       setSimulation(null);
       return;
     }
-    const simNodes = nodes.map(n => ({ ...n }));
+    const simNodes = filteredNodes.map(n => ({ ...n }));
     const simLinks = links.map(l => ({ ...l }));
     const width = 800;
     const height = 600;
@@ -305,7 +321,7 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
       }
     });
 
-    const simulation = d3.forceSimulation<NetworkNode, undefined>(simNodes as NetworkNode[])
+    const simulation = d3.forceSimulation<NetworkNode, NetworkLink>(simNodes as NetworkNode[])
       .force('link', d3.forceLink<NetworkNode, NetworkLink>(simLinks.filter((l): l is NetworkLink => !!l && typeof l.source !== 'undefined' && typeof l.target !== 'undefined') as NetworkLink[])
         .id(d => (typeof d === 'object' && d !== null && 'id' in d) ? (d as NetworkNode).id : '')
         .distance(100) // Fixed distance between linked nodes
@@ -378,7 +394,7 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
     return () => {
       simulation.stop();
     };
-  }, [data]);
+  }, [data, hideOrphans]);
 
   // Update the zoom behavior configuration
   useEffect(() => {
@@ -509,7 +525,7 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
                 {('type' in node) && typeof (node as any).type === 'string' && (
                   <DraggableCircle
                     node={node}
-                    simulation={simulation as d3.Simulation<NetworkNode, undefined>}
+                    simulation={simulation as d3.Simulation<NetworkNode, NetworkLink>}
                     cx={typeof node.x === 'number' ? node.x : 0}
                     cy={typeof node.y === 'number' ? node.y : 0}
                     r={18}
@@ -588,7 +604,7 @@ function NetworkGraph({ data }: { data: ApiObject[] }) {
   );
 }
 
-function NetworkLegend({ counts }: { counts: Record<string, number> }) {
+function NetworkLegend({ counts, onHideOrphansChange }: { counts: Record<string, number>; onHideOrphansChange: (value: boolean) => void }) {
   return (
     <Flex direction="row" gap="size-300" alignItems="center" marginBottom="size-200">
       <Flex alignItems="center" gap="size-100">
@@ -611,6 +627,9 @@ function NetworkLegend({ counts }: { counts: Record<string, number> }) {
         <svg width={36} height={36}><circle cx={18} cy={18} r={18} fill="#f8d904" stroke="#fff" strokeWidth={2} /></svg>
         <Text>Portfolio ({counts.Portfolio || 0})</Text>
       </Flex>
+      <Flex alignItems="center" gap="size-100" marginStart="auto">
+        <Switch onChange={onHideOrphansChange}>Hide orphans</Switch>
+      </Flex>
     </Flex>
   );
 }
@@ -622,6 +641,7 @@ function App() {
   const [selectedTab, setSelectedTab] = useState<Key>('table');
   const [allObjects, setAllObjects] = useState<ApiObject[]>([]);
   const [loadingAll, setLoadingAll] = useState<boolean>(true);
+  const [hideOrphans, setHideOrphans] = useState(false);
 
   // Fetch all objects on mount
   useEffect(() => {
@@ -744,7 +764,7 @@ function App() {
   };
 
   const getStatusVariant = (status: string) => {
-    const statusMap: Record<string, 'positive' | 'negative' | 'notice' | 'info' | 'neutral'> = {
+    const statusMap: Record<StatusCode, 'positive' | 'negative' | 'notice' | 'info' | 'neutral'> = {
       'CUR': 'positive',    // Current
       'PLN': 'info',        // Planning
       'CPL': 'positive',    // Complete
@@ -755,7 +775,7 @@ function App() {
       'RLV': 'neutral',     // Resolved
       'QUE': 'notice'       // Queued
     };
-    return statusMap[status] || 'neutral';
+    return statusMap[status as StatusCode] || 'neutral';
   };
 
   // Add type guards for property access
@@ -960,8 +980,11 @@ function App() {
                 </Flex>
               </Item>
               <Item key="network">
-                <NetworkLegend counts={countObjectTypes(allObjects)} />
-                <NetworkGraph data={allObjects} />
+                <NetworkLegend 
+                  counts={countObjectTypes(allObjects)} 
+                  onHideOrphansChange={setHideOrphans}
+                />
+                <NetworkGraph data={allObjects} hideOrphans={hideOrphans} />
               </Item>
             </TabPanels>
           </Tabs>
