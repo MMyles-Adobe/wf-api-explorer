@@ -17,6 +17,17 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    define: {
+      'process.env': {},
+      'process.env.NODE_ENV': JSON.stringify(mode),
+      'process.version': JSON.stringify('v16.14.0'),
+      'import.meta.env': {
+        VITE_API_URL: mode === 'production' 
+          ? 'https://productmgmtaemaebeta.my.workfront.com/attask/api/v15.0'
+          : 'http://localhost:3001',
+        VITE_WORKFRONT_API_KEY: env.VITE_WORKFRONT_API_KEY || 'q9ios5o0rbu6lpe2vwjka9je4b00dgt0'
+      }
+    },
     base: './',
     build: {
       outDir: 'dist',
